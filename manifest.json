@@ -1,0 +1,29 @@
+{
+  "description": "Performs sasl authentication.",
+  "manifest_version": 2,
+  "name": "sasl-credentials",
+  "version": "2.0",
+  "author": "Mansoft",
+  "homepage_url": "https://github.com/arpa2/http-sasl-plugin",
+  "icons": {
+    "48": "icons/lock.svg"
+  },
+
+  "applications": {
+    "gecko": {
+      "id": "sasl@example.org",
+      "strict_min_version": "54.0a1"
+    }
+  },
+
+  "background": {
+    "scripts": [ "auth.js" ]
+  },
+
+  "permissions": [
+    "nativeMessaging",
+    "webRequest",
+    "webRequestBlocking",
+    "<all_urls>"
+  ]
+}
