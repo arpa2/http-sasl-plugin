@@ -178,7 +178,7 @@ public class Client extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        try (FileWriter fw = new FileWriter("c:\\tmp\\log.txt", true);
+        try (FileWriter fw = new FileWriter("log.txt", true);
             BufferedWriter bw = new BufferedWriter(fw);
             PrintWriter logwriter = new PrintWriter(bw, true))
         {
