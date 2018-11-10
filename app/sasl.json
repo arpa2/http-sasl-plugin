@@ -1,0 +1,7 @@
+{
+    "name": "sasl",
+    "description": "SASL host for native messaging",
+    "path": "/home/manson/arpa2/http-sasl-plugin/app/sasl.sh",
+    "type": "stdio",
+    "allowed_extensions": [ "sasl@example.org" ]
+}
