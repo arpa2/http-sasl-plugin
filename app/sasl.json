@@ -1,7 +1,7 @@
 {
-  "name": "sasl",
+	"name": "sasl",
   "description": "SASL host for native messaging",
-  "path": "c:\\Users\\hfman\\Documents\\arpa2\\sasl-credentials\\app\\sasl_win.bat",
+  "path": "c:\\Users\\hfman\\Documents\\arpa2\\http-sasl-plugin\\app\\sasl_win.bat",
   "type": "stdio",
   "allowed_extensions": [ "sasl@example.org" ]
 }
