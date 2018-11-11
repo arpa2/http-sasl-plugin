@@ -82,7 +82,6 @@ public class Client extends Application {
             if (callback instanceof NameCallback) {
                 NameCallback nameCallback = (NameCallback) callback;
                 Optional<Pair<String, String>> result = dialog.showAndWait();
-                dialog.close();
                 result.ifPresent(usernamePassword -> {
                     //System.out.println("Username=" + usernamePassword.getKey() + ", Password=" + usernamePassword.getValue());
                     nameCallback.setName(usernamePassword.getKey());
@@ -93,6 +92,7 @@ public class Client extends Application {
             } else if (callback instanceof PasswordCallback) {
                 PasswordCallback passwordCallback = (PasswordCallback) callback;
                 passwordCallback.setPassword(password.toCharArray());
+                dialog.close();
             } else if (callback instanceof RealmCallback) {
                 RealmCallback realmCallback = (RealmCallback) callback;
                 realmCallback.setText(realmCallback.getDefaultText());
