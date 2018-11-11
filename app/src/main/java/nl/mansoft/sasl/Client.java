@@ -41,8 +41,11 @@ import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
 /**
  *
- * @author hfman
+ * @author hfmanson@gmail.com
  */
+
+// JavaFX login dialog based on https://code.makery.ch/blog/javafx-dialogs-official/
+
 public class Client extends Application {
     private Dialog<Pair<String, String>> dialog;
     private String password;
@@ -79,7 +82,7 @@ public class Client extends Application {
             if (callback instanceof NameCallback) {
                 NameCallback nameCallback = (NameCallback) callback;
                 Optional<Pair<String, String>> result = dialog.showAndWait();
-
+                dialog.close();
                 result.ifPresent(usernamePassword -> {
                     //System.out.println("Username=" + usernamePassword.getKey() + ", Password=" + usernamePassword.getValue());
                     nameCallback.setName(usernamePassword.getKey());
