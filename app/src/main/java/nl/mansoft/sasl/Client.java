@@ -92,7 +92,6 @@ public class Client extends Application {
             } else if (callback instanceof PasswordCallback) {
                 PasswordCallback passwordCallback = (PasswordCallback) callback;
                 passwordCallback.setPassword(password.toCharArray());
-                dialog.close();
             } else if (callback instanceof RealmCallback) {
                 RealmCallback realmCallback = (RealmCallback) callback;
                 realmCallback.setText(realmCallback.getDefaultText());
@@ -243,6 +242,7 @@ public class Client extends Application {
                     logwriter.println(output);
                     writeInt32(output.length());
                     System.out.print(output);
+                    System.out.flush();
                 }
                 logwriter.println("EXITING");
             } catch (Exception e) {

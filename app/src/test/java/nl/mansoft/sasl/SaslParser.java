@@ -38,10 +38,7 @@ public class SaslParser {
 
     public static Map<String, String> parse(String input) {
         Map<String, String> map = null;
-        System.out.println(input);
-        //String regexp = readRegExp();
         String regexp = RE_CREDENTIALS;
-        System.out.println(regexp);
         Pattern authorization_stx = Pattern.compile(regexp);
         Matcher matcher1 = authorization_stx.matcher(input);
         if (matcher1.matches()) {
