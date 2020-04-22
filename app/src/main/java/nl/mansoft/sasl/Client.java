@@ -9,7 +9,6 @@ import java.io.BufferedWriter;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.io.StringReader;
 import java.util.Base64;
 import java.util.Optional;
 import javafx.application.Application;
@@ -30,7 +29,6 @@ import javax.json.JsonBuilderFactory;
 import javax.json.JsonObject;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonString;
-import javax.json.stream.JsonParser;
 import javax.security.auth.callback.Callback;
 import javax.security.auth.callback.CallbackHandler;
 import javax.security.auth.callback.NameCallback;
@@ -39,6 +37,7 @@ import javax.security.auth.callback.UnsupportedCallbackException;
 import javax.security.sasl.RealmCallback;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslClient;
+import nl.mansoft.browserextension.NativeMessaging;
 /**
  *
  * @author hfmanson@gmail.com
@@ -49,33 +48,6 @@ import javax.security.sasl.SaslClient;
 public class Client extends Application {
     private Dialog<Pair<String, String>> dialog;
     private String password;
-
-    public static int readInt32() throws IOException {
-        int byte1 = System.in.read();
-        if (byte1 == -1) {
-            return -1;
-        }
-        int byte2 = System.in.read() << 8;
-        if (byte2 == -1) {
-            return -1;
-        }
-        int byte3 = System.in.read() << 16;
-        if (byte3 == -1) {
-            return -1;
-        }
-        int byte4 = System.in.read() << 24;
-        if (byte4 == -1) {
-            return -1;
-        }
-        return byte1 | byte2 | byte3 | byte4;
-    }
-
-    public static void writeInt32(int length) throws IOException {
-        System.out.write(length);
-        System.out.write(length >> 8);
-        System.out.write(length >> 16);
-        System.out.write(length >> 24);
-    }
 
     public void processCallbacks(Callback[] callbacks) {
         for (Callback callback : callbacks) {
@@ -115,10 +87,10 @@ public class Client extends Application {
 
     public static void printArgs(PrintWriter logwriter, String[] args) {
         if (args.length == 0) {
-            logwriter.println("No arguments");
+            System.err.println("No arguments");
         } else {
             for (String arg: args) {
-                logwriter.println(arg);
+                System.err.println(arg);
             }
         }
     }
@@ -180,76 +152,61 @@ public class Client extends Application {
 
     @Override
     public void start(Stage primaryStage) {
-        try (FileWriter fw = new FileWriter("log.txt", true);
-            BufferedWriter bw = new BufferedWriter(fw);
-            PrintWriter logwriter = new PrintWriter(bw, true))
-        {
-            try {
-                logwriter.println("STARTING");
-                //printArgs(logwriter, args);
-                createDialog();
+        try {
+            System.err.println("STARTING");
+            //printArgs(logwriter, args);
+            createDialog();
 
-                int len;
-                String mechanism = "DIGEST-MD5";
-                SaslClient sc = null;
-                while ((len = readInt32()) != -1) {
-                    byte[] message = new byte[len];
-                    System.in.read(message);
-                    String str = new String(message, "UTF-8");
-                    StringReader reader = new StringReader(str);
-                    JsonParser parser = Json.createParser(reader);
-                    parser.next();
-                    JsonObject inputJson = parser.getObject();
-                    logwriter.println(inputJson);
-                    if (!inputJson.containsKey("s2s")) {
-                        logwriter.println("no realm, creating SASL client");
-                        if (sc != null) {
-                            logwriter.println("disposing previous SASL client");
-                            sc.dispose();
-                        }
-                        sc = Sasl.createSaslClient(new String[] { mechanism }, "henri", "http", "test-realm.nl", null, new CallbackHandler() {
-                            @Override
-                            public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-                                processCallbacks(callbacks);
-                            }
-                        });
+            JsonObject inputJson;
+            String mechanism = "DIGEST-MD5";
+            SaslClient sc = null;
+            NativeMessaging nativeMessaging = new NativeMessaging();
+            while ((inputJson = nativeMessaging.readMessage()) != null) {
+                System.err.println(inputJson);
+                if (!inputJson.containsKey("s2s")) {
+                    System.err.println("no realm, creating SASL client");
+                    if (sc != null) {
+                        System.err.println("disposing previous SASL client");
+                        sc.dispose();
                     }
-                    JsonBuilderFactory factory = Json.createBuilderFactory(null);
-                    JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder()
-                        .add("mech", "DIGEST-MD5");
-                    addString(outputJsonBuilder, inputJson, "realm");
-                    addString(outputJsonBuilder, inputJson, "s2s");
-                    String s2cBase64 = jsonGetString(inputJson, "s2c");
-                    if (s2cBase64 != null) {
-                        byte[] challenge = Base64.getDecoder().decode(s2cBase64);
-                        logwriter.println(new String(challenge));
-                        byte[] response = sc.evaluateChallenge(challenge);
-                        if (response == null) {
-                            logwriter.println("response is null");
-                            if (sc.isComplete()) {
-                                logwriter.println("sc.isComplete()");
-                                sc.dispose();
-                                sc = null;
-                            }
-                        } else {
-                            logwriter.println(new String(response));
-                            String c2s = Base64.getEncoder().encodeToString(response);
-                            outputJsonBuilder.add("c2s", c2s);
+                    sc = Sasl.createSaslClient(new String[] { mechanism }, "henri", "http", "test-realm.nl", null, new CallbackHandler() {
+                        @Override
+                        public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
+                            processCallbacks(callbacks);
                         }
-                    }
-                    JsonObject outputJson = outputJsonBuilder.build();
-                    String output = outputJson.toString();
-                    logwriter.println(output);
-                    writeInt32(output.length());
-                    System.out.print(output);
-                    System.out.flush();
+                    });
                 }
-                logwriter.println("EXITING");
-            } catch (Exception e) {
-                e.printStackTrace(logwriter);
+                JsonBuilderFactory factory = Json.createBuilderFactory(null);
+                JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder()
+                    .add("mech", "DIGEST-MD5");
+                addString(outputJsonBuilder, inputJson, "realm");
+                addString(outputJsonBuilder, inputJson, "s2s");
+                String s2cBase64 = jsonGetString(inputJson, "s2c");
+                if (s2cBase64 != null) {
+                    byte[] challenge = Base64.getDecoder().decode(s2cBase64);
+                    System.err.println(new String(challenge));
+                    byte[] response = sc.evaluateChallenge(challenge);
+                    if (response == null) {
+                        System.err.println("response is null");
+                        if (sc.isComplete()) {
+                            System.err.println("sc.isComplete()");
+                            sc.dispose();
+                            sc = null;
+                        }
+                    } else {
+                        System.err.println(new String(response));
+                        String c2s = Base64.getEncoder().encodeToString(response);
+                        outputJsonBuilder.add("c2s", c2s);
+                    }
+                }
+                JsonObject outputJson = outputJsonBuilder.build();
+                nativeMessaging.writeMessage(outputJson);
+                String output = outputJson.toString();
+                System.err.println(output);
             }
-        } catch (IOException e2) {
-            //exception handling left as an exercise for the reader
+            System.err.println("EXITING");
+        } catch (Exception e) {
+            e.printStackTrace(System.err);
         }
     }
 }
