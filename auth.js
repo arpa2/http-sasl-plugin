@@ -1,4 +1,5 @@
 let lastResponse;
+let mech;
 
 const
 	target = "<all_urls>"
@@ -55,11 +56,12 @@ const
 		if (index > -1) {
 			pendingRequests.splice(index, 1);
 		}
+		mech = undefined;
 	}, asyncRedirect = (attrs, obj) => {
 		return new Promise((resolve, reject) => {
 			const
 				portListener = (response) => {
-					console.log("s2s: " + response.s2s);
+					console.log("response: " + JSON.stringify(response));
 					lastResponse = response;
 					resolve(obj);
 					port.onMessage.removeListener(portListener);
@@ -69,6 +71,15 @@ const
 			port.onMessage.addListener(portListener);
 			port.postMessage(attrs);
 		});
+	}, binaryToHex = (binary) => {
+		let result = "";
+		for (let i = 0; i < binary.length; i++) {
+			result += ("00" + binary.charCodeAt(i).toString(16)).slice(-2) + " ";
+		}
+		return result;
+	}, saslDataToString = (str) => {
+		const data = atob(str);
+		return mech === "DIGEST-MD5" ? data : binaryToHex(data);
 	}, onHeadersReceived = (requestDetails) => {
 		let i;
 		const responseHeaders = requestDetails.responseHeaders;
@@ -76,25 +87,22 @@ const
 			responseHeaders[responseHeaders[i].name] = responseHeaders[i];
 		}
 		console.log(requestDetails);
-		if (requestDetails.statusCode = 401) {
-			if (responseHeaders["WWW-Authenticate"]) {
-				// If we have seen this request before,
-				// then assume our credentials were bad,
-				// and give up.
-				const authenticate = responseHeaders["WWW-Authenticate"].value;
-				const attrs = parseSasl(authenticate);
-				console.log(attrs);
-				if (attrs.s2c) {
-					console.log("s2c: " + atob(attrs.s2c));
-				}
-				
+		const authenticate = responseHeaders["WWW-Authenticate"];
+		if (authenticate) {
+			const attrs = parseSasl(authenticate.value);
+			console.log("Status code: " + requestDetails.statusCode);
+			console.log(attrs);
+
+			if (attrs.mech) {
+				mech = attrs.mech;
+				console.log("mech: " + mech);
+			}
+			if (attrs.s2c) {
+				console.log("s2c: " + saslDataToString(attrs.s2c));
+			}
+
+			if (requestDetails.statusCode == 401) {
 				if (pendingRequests.indexOf(requestDetails.requestId) != -1) {
-	/*			
-					console.log("bad credentials for: " + requestDetails.requestId);
-					return {
-						cancel: true
-					};
-	*/			
 					console.log("phase 2: " + requestDetails.requestId);
 					return asyncRedirect(attrs, {
 						redirectUrl: requestDetails.url
@@ -106,11 +114,11 @@ const
 						redirectUrl: requestDetails.url
 					});
 				}
-				
+
 			} else {
-				console.log("Reset sasl-client");
-				return {
-				};
+				console.log("phase 3: " + requestDetails.requestId);
+				return asyncRedirect(attrs, {
+				});
 			}
 		} else {
 			return {
@@ -118,28 +126,36 @@ const
 		}
 	}, onBeforeSendHeaders = (requestDetails) => {
 		const sendField = function (name, value, include_quotes) {
-			let result = "";
-			if (value) {
-				const quotes = include_quotes ? "\"" : "";
-				result = name + "=" + quotes + value + quotes;
-			}
-			return result;
+			const quotes = include_quotes ? "\"" : "";
+			return name + "=" + quotes + value + quotes;;
 		}
 		console.log(pendingRequests);
 		console.log(requestDetails);
 		const index = pendingRequests.indexOf(requestDetails.requestId);
 		if (index > -1) {
 			const requestHeaders = requestDetails.requestHeaders;
-			const authorization = 
-				"SASL" +
-				sendField(" mech", "DIGEST-MD5", true) +
-				sendField(",realm", lastResponse.realm, true)  +
-				sendField(",s2s", lastResponse.s2s, false) +
-				sendField(",c2s", lastResponse.c2s, false)
-				;
+			let authorization = "SASL";
+			let sep = " ";
+
+			if (lastResponse.mech) {
+				authorization += sep + sendField("mech", lastResponse.mech, true);
+				sep = ","
+			}
+			if (lastResponse.realm) {
+				authorization += sep + sendField("realm", lastResponse.realm, true);
+				sep = ","
+			}
+			if (lastResponse.s2s) {
+				authorization += sep + sendField("s2s", lastResponse.s2s, false);
+				sep = ","
+			}
+			if (lastResponse.c2s) {
+				authorization += sep + sendField("c2s", lastResponse.c2s, false);
+				sep = ","
+			}
 			console.log(authorization);
 			if (lastResponse.c2s) {
-				console.log("c2s: " + atob(lastResponse.c2s));
+				console.log("c2s: " + saslDataToString(lastResponse.c2s));
 			}
 			requestDetails.requestHeaders.push(
 				{
@@ -153,54 +169,6 @@ const
 		}
 	}
 	;
-
-/* Old stuff
-function parseSasl(sasl) {
-	const rc = {};
-	if (sasl.slice(0, 4) === "SASL") {
-		const pos = 4;
-		const c;
-		while (true) {
-			while ((c = sasl.charAt(pos)) === ' ') {
-				pos++;
-			}
-			if (c === "") {
-				break;
-			}
-			const name = "";
-			while ((c = sasl.charAt(pos)) !== '=') {
-				name += c;
-				pos++;
-			}
-			c = sasl.charAt(++pos);
-			const delim;
-			if (c === "\"") {
-				delim = "\"";
-				pos++;
-				} else {
-				delim = " ";
-			}
-			const value = "";
-			while ((c = sasl.charAt(pos)) !== delim && c !== "") {
-				value += c;
-				pos++;
-			}
-			if (c === "\"" && delim === "\"") {
-				pos++;
-			}
-			rc[name] = value;
-		}
-	}
-	return rc;
-}
-
-// Does not work with SASL WWW-Authenticate header
- browser.webRequest.onAuthRequired.addListener(
- provideCredentialsAsync,
- {urls: [ target ]},
- ["blocking"]
- );
-*/
 
 browser.webRequest.onHeadersReceived.addListener(
         onHeadersReceived,
