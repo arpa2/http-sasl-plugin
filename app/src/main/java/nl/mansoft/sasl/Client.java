@@ -137,7 +137,7 @@ public class Client extends Application {
         });
 
         dialog.getDialogPane().setContent(grid);
-
+        dialog.setResizable(true);
 // Request focus on the username field by default.
         Platform.runLater(() -> username.requestFocus());
 
