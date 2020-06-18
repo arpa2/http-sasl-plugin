@@ -1,4 +1,4 @@
-let lastResponse;
+let lastResponseGlobal = { };
 let mech;
 let c2c = { };
 
@@ -59,17 +59,18 @@ const
 		}
 		mech = undefined;
 		delete c2c[requestDetails.requestId];
-	}, asyncRedirect = (attrs, obj) => {
+	}, asyncRedirect = (attrs, requestId, obj) => {
 		return new Promise((resolve, reject) => {
 			const
 				portListener = (response) => {
-					console.log("response: " + JSON.stringify(response));
-					lastResponse = response;
-					resolve(obj);
+					console.log("response " + requestId + ": " + JSON.stringify(response));
+					lastResponseGlobal[requestId] = response;
 					port.onMessage.removeListener(portListener);
+					resolve(obj);
 				}
 				;
 
+			console.log("posting " + requestId + ": " + JSON.stringify(attrs));
 			port.onMessage.addListener(portListener);
 			port.postMessage(attrs);
 		});
@@ -115,21 +116,20 @@ const
 			if (requestDetails.statusCode == 401) {
 				if (pendingRequests.indexOf(requestId) != -1) {
 					console.log("phase 2: " + requestId);
-					console.log("phase 2 url: " + requestDetails.url);
-					return asyncRedirect(attrs, {
+					return asyncRedirect(attrs, requestId, {
 						redirectUrl: requestDetails.url
 					});
 				} else {
 					pendingRequests.push(requestId);
 					console.log("phase 1: " + requestId);
-					return asyncRedirect(attrs, {
+					return asyncRedirect(attrs, requestId, {
 						redirectUrl: requestDetails.url
 					});
 				}
 
 			} else {
 				console.log("phase 3: " + requestId);
-				return asyncRedirect(attrs, {
+				return asyncRedirect(attrs, requestId, {
 				});
 			}
 		} else {
@@ -143,9 +143,12 @@ const
 		}
 		console.log("-------------------");
 		console.log("onBeforeSendHeaders");
+		const requestId = requestDetails.requestId;
+		const lastResponse = lastResponseGlobal[requestId];
+		delete lastResponseGlobal[requestId];
 		console.log(pendingRequests);
 		console.log(requestDetails);
-		const index = pendingRequests.indexOf(requestDetails.requestId);
+		const index = pendingRequests.indexOf(requestId);
 		if (index > -1) {
 			const requestHeaders = requestDetails.requestHeaders;
 			let authorization = "SASL";
@@ -168,7 +171,7 @@ const
 				sep = ","
 			}
 			if (lastResponse.c2c) {
-				c2c[requestDetails.requestId] = lastResponse.c2c;
+				c2c[requestId] = lastResponse.c2c;
 				console.log("c2c: " + atob(lastResponse.c2c));
 			}
 			console.log(authorization);
