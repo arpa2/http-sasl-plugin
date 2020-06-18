@@ -1,5 +1,6 @@
 let lastResponse;
 let mech;
+let c2c = { };
 
 const
 	target = "<all_urls>"
@@ -57,6 +58,7 @@ const
 			pendingRequests.splice(index, 1);
 		}
 		mech = undefined;
+		delete c2c[requestDetails.requestId];
 	}, asyncRedirect = (attrs, obj) => {
 		return new Promise((resolve, reject) => {
 			const
@@ -86,10 +88,13 @@ const
 		for (i = 0; i < responseHeaders.length; i++) {
 			responseHeaders[responseHeaders[i].name] = responseHeaders[i];
 		}
+		console.log("-----------------");
+		console.log("onHeadersReceived");
 		console.log(requestDetails);
 		const authenticate = responseHeaders["WWW-Authenticate"];
 		if (authenticate) {
 			const attrs = parseSasl(authenticate.value);
+			const requestId = requestDetails.requestId;
 			console.log("Status code: " + requestDetails.statusCode);
 			console.log(attrs);
 
@@ -100,23 +105,30 @@ const
 			if (attrs.s2c) {
 				console.log("s2c: " + saslDataToString(attrs.s2c));
 			}
-
+			if (attrs.s2s) {
+				console.log("s2s: " + atob(attrs.s2s));
+			}
+			if (c2c[requestId]) {
+				console.log("c2c: " + atob(c2c[requestId]));
+				attrs.c2c = c2c[requestId];
+			}
 			if (requestDetails.statusCode == 401) {
-				if (pendingRequests.indexOf(requestDetails.requestId) != -1) {
-					console.log("phase 2: " + requestDetails.requestId);
+				if (pendingRequests.indexOf(requestId) != -1) {
+					console.log("phase 2: " + requestId);
+					console.log("phase 2 url: " + requestDetails.url);
 					return asyncRedirect(attrs, {
 						redirectUrl: requestDetails.url
 					});
 				} else {
-					pendingRequests.push(requestDetails.requestId);
-					console.log("phase 1: " + requestDetails.requestId);
+					pendingRequests.push(requestId);
+					console.log("phase 1: " + requestId);
 					return asyncRedirect(attrs, {
 						redirectUrl: requestDetails.url
 					});
 				}
 
 			} else {
-				console.log("phase 3: " + requestDetails.requestId);
+				console.log("phase 3: " + requestId);
 				return asyncRedirect(attrs, {
 				});
 			}
@@ -129,6 +141,8 @@ const
 			const quotes = include_quotes ? "\"" : "";
 			return name + "=" + quotes + value + quotes;;
 		}
+		console.log("-------------------");
+		console.log("onBeforeSendHeaders");
 		console.log(pendingRequests);
 		console.log(requestDetails);
 		const index = pendingRequests.indexOf(requestDetails.requestId);
@@ -152,6 +166,10 @@ const
 			if (lastResponse.c2s) {
 				authorization += sep + sendField("c2s", lastResponse.c2s, false);
 				sep = ","
+			}
+			if (lastResponse.c2c) {
+				c2c[requestDetails.requestId] = lastResponse.c2c;
+				console.log("c2c: " + atob(lastResponse.c2c));
 			}
 			console.log(authorization);
 			if (lastResponse.c2s) {
