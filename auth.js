@@ -59,18 +59,20 @@ const
 		}
 		mech = undefined;
 		delete c2c[requestDetails.requestId];
-	}, asyncRedirect = (attrs, requestId, obj) => {
+	}, asyncRedirect = (attrs) => {
 		return new Promise((resolve, reject) => {
 			const
 				portListener = (response) => {
-					console.log("response " + requestId + ": " + JSON.stringify(response));
-					lastResponseGlobal[requestId] = response;
+					console.log("response " + response.requestId + ": " + JSON.stringify(response));
+					console.log("portListener.requestId: " + portListener.requestId);
+					lastResponseGlobal[response.requestId] = response;
+					resolve(response.extraInfoSpec);
 					port.onMessage.removeListener(portListener);
-					resolve(obj);
 				}
 				;
 
-			console.log("posting " + requestId + ": " + JSON.stringify(attrs));
+			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
+			portListener.requestId = attrs.requestId;
 			port.onMessage.addListener(portListener);
 			port.postMessage(attrs);
 		});
@@ -96,6 +98,8 @@ const
 		if (authenticate) {
 			const attrs = parseSasl(authenticate.value);
 			const requestId = requestDetails.requestId;
+			attrs.requestId = requestId;
+
 			console.log("Status code: " + requestDetails.statusCode);
 			console.log(attrs);
 
@@ -116,21 +120,24 @@ const
 			if (requestDetails.statusCode == 401) {
 				if (pendingRequests.indexOf(requestId) != -1) {
 					console.log("phase 2: " + requestId);
-					return asyncRedirect(attrs, requestId, {
+					attrs.extraInfoSpec = {
 						redirectUrl: requestDetails.url
-					});
+					};
+					return asyncRedirect(attrs);
 				} else {
 					pendingRequests.push(requestId);
 					console.log("phase 1: " + requestId);
-					return asyncRedirect(attrs, requestId, {
+					attrs.extraInfoSpec = {
 						redirectUrl: requestDetails.url
-					});
+					};
+					return asyncRedirect(attrs);
 				}
 
 			} else {
 				console.log("phase 3: " + requestId);
-				return asyncRedirect(attrs, requestId, {
-				});
+				attrs.extraInfoSpec = {
+				};
+				return asyncRedirect(attrs);
 			}
 		} else {
 			return {
