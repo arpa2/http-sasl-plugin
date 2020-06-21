@@ -1,10 +1,5 @@
-let lastResponseGlobal = { };
-let mech;
-let c2c = { };
-
 const
 	target = "<all_urls>"
-	, pendingRequests = []
 	/*
 	On startup, connect to the "sasl" app.
 	*/
@@ -48,34 +43,6 @@ const
 		} else {
 			console.log("No match");
 		}
-	}, completed = (requestDetails) => {
-		/*
-		 A request has completed. We can stop worrying about it.
-		 */
-		console.log("completed: " + requestDetails.requestId);
-		const index = pendingRequests.indexOf(requestDetails.requestId);
-		if (index > -1) {
-			pendingRequests.splice(index, 1);
-		}
-		mech = undefined;
-		delete c2c[requestDetails.requestId];
-	}, asyncRedirect = (attrs) => {
-		return new Promise((resolve, reject) => {
-			const
-				portListener = (response) => {
-					console.log("response " + response.requestId + ": " + JSON.stringify(response));
-					console.log("portListener.requestId: " + portListener.requestId);
-					lastResponseGlobal[response.requestId] = response;
-					resolve(response.extraInfoSpec);
-					port.onMessage.removeListener(portListener);
-				}
-				;
-
-			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
-			portListener.requestId = attrs.requestId;
-			port.onMessage.addListener(portListener);
-			port.postMessage(attrs);
-		});
 	}, binaryToHex = (binary) => {
 		let result = "";
 		for (let i = 0; i < binary.length; i++) {
@@ -84,15 +51,15 @@ const
 		return result;
 	}, saslDataToString = (str) => {
 		const data = atob(str);
-		return mech === "DIGEST-MD5" ? data : binaryToHex(data);
-	}, onHeadersReceived = (requestDetails) => {
+		return binaryToHex(data);
+	}, onHeadersReceivedPrelude = (requestDetails, handler) => {
 		let i;
 		const responseHeaders = requestDetails.responseHeaders;
 		for (i = 0; i < responseHeaders.length; i++) {
 			responseHeaders[responseHeaders[i].name] = responseHeaders[i];
 		}
-		console.log("-----------------");
-		console.log("onHeadersReceived");
+		console.log("------------------------");
+		console.log("onHeadersReceivedPrelude");
 		console.log(requestDetails);
 		const authenticate = responseHeaders["WWW-Authenticate"];
 		if (authenticate) {
@@ -104,8 +71,7 @@ const
 			console.log(attrs);
 
 			if (attrs.mech) {
-				mech = attrs.mech;
-				console.log("mech: " + mech);
+				console.log("mech: " + attrs.mech);
 			}
 			if (attrs.s2c) {
 				console.log("s2c: " + saslDataToString(attrs.s2c));
@@ -113,90 +79,138 @@ const
 			if (attrs.s2s) {
 				console.log("s2s: " + atob(attrs.s2s));
 			}
-			if (c2c[requestId]) {
-				console.log("c2c: " + atob(c2c[requestId]));
-				attrs.c2c = c2c[requestId];
-			}
-			if (requestDetails.statusCode == 401) {
-				if (pendingRequests.indexOf(requestId) != -1) {
-					console.log("phase 2: " + requestId);
-					attrs.extraInfoSpec = {
-						redirectUrl: requestDetails.url
-					};
-					return asyncRedirect(attrs);
-				} else {
-					pendingRequests.push(requestId);
-					console.log("phase 1: " + requestId);
-					attrs.extraInfoSpec = {
-						redirectUrl: requestDetails.url
-					};
-					return asyncRedirect(attrs);
-				}
-
-			} else {
-				console.log("phase 3: " + requestId);
-				attrs.extraInfoSpec = {
-				};
-				return asyncRedirect(attrs);
-			}
+			return handler(requestDetails, attrs);
 		} else {
 			return {
 			};
 		}
-	}, onBeforeSendHeaders = (requestDetails) => {
-		const sendField = function (name, value, include_quotes) {
-			const quotes = include_quotes ? "\"" : "";
-			return name + "=" + quotes + value + quotes;;
-		}
-		console.log("-------------------");
-		console.log("onBeforeSendHeaders");
-		const requestId = requestDetails.requestId;
-		const lastResponse = lastResponseGlobal[requestId];
-		delete lastResponseGlobal[requestId];
-		console.log(pendingRequests);
-		console.log(requestDetails);
-		const index = pendingRequests.indexOf(requestId);
-		if (index > -1) {
-			const requestHeaders = requestDetails.requestHeaders;
-			let authorization = "SASL";
-			let sep = " ";
+	}, completed = (requestDetails) => {
+		console.log("completed: " + requestDetails.requestId);
+	}, asyncRedirect = (attrs) => {
+		return new Promise((resolve, reject) => {
+			const
+				portListener = (response) => {
+					const
+						onBeforeSendHeaders = (requestDetails) => {
+							const
+								onHeadersReceived1 = (requestDetails1) => {
+									console.log("------------------");
+									console.log("onHeadersReceived1");
+									return onHeadersReceivedPrelude(requestDetails1, (requestDetails1, attrs) => {
+										const requestId1 = requestDetails1.requestId;
+										if (requestId1 === requestId) {
+											browser.webRequest.onHeadersReceived.removeListener(onHeadersReceived1);
+											if (response.c2c) {
+												console.log("c2c: " + atob(response.c2c));
+												attrs.c2c = response.c2c;
+											}
+											if (requestDetails1.statusCode === 401) {
+												console.log("phase 2: " + requestId1);
+												attrs.extraInfoSpec = {
+													redirectUrl: requestDetails1.url
+												};
+											} else {
+												console.log("phase 3: " + requestId1);
+												attrs.extraInfoSpec = {
+												};
+											}
+											return asyncRedirect(attrs);
+										}
+									});
+								}
+								;
 
-			if (lastResponse.mech) {
-				authorization += sep + sendField("mech", lastResponse.mech, true);
-				sep = ","
-			}
-			if (lastResponse.realm) {
-				authorization += sep + sendField("realm", lastResponse.realm, true);
-				sep = ","
-			}
-			if (lastResponse.s2s) {
-				authorization += sep + sendField("s2s", lastResponse.s2s, false);
-				sep = ","
-			}
-			if (lastResponse.c2s) {
-				authorization += sep + sendField("c2s", lastResponse.c2s, false);
-				sep = ","
-			}
-			if (lastResponse.c2c) {
-				c2c[requestId] = lastResponse.c2c;
-				console.log("c2c: " + atob(lastResponse.c2c));
-			}
-			console.log(authorization);
-			if (lastResponse.c2s) {
-				console.log("c2s: " + saslDataToString(lastResponse.c2s));
-			}
-			requestDetails.requestHeaders.push(
-				{
-					name: "Authorization",
-					value: authorization
+							console.log("-------------------");
+							console.log("onBeforeSendHeaders");
+							console.log(requestDetails);
+							const requestId = requestDetails.requestId;
+							if (requestId === response.requestId) {
+								browser.webRequest.onBeforeSendHeaders.removeListener(onBeforeSendHeaders);
+								const sendField = function (name, value, include_quotes) {
+									const quotes = include_quotes ? "\"" : "";
+									return name + "=" + quotes + value + quotes;;
+								}
+								const requestHeaders = requestDetails.requestHeaders;
+								let authorization = "SASL";
+								let sep = " ";
+
+								if (response.mech) {
+									authorization += sep + sendField("mech", response.mech, true);
+									sep = ","
+								}
+								if (response.realm) {
+									authorization += sep + sendField("realm", response.realm, true);
+									sep = ","
+								}
+								if (response.s2s) {
+									authorization += sep + sendField("s2s", response.s2s, false);
+									sep = ","
+								}
+								if (response.c2s) {
+									authorization += sep + sendField("c2s", response.c2s, false);
+									sep = ","
+								}
+								if (response.c2c) {
+									console.log("c2c: " + atob(response.c2c));
+								}
+								console.log(authorization);
+								if (response.c2s) {
+									console.log("c2s: " + saslDataToString(response.c2s));
+								}
+								requestDetails.requestHeaders.push(
+									{
+										name: "Authorization",
+										value: authorization
+									}
+								);
+								browser.webRequest.onHeadersReceived.addListener(
+									onHeadersReceived1,
+									{ urls: [ target ] },
+									[ "blocking", "responseHeaders" ]
+								);
+								return { requestHeaders: requestHeaders };
+							}
+						}
+						;
+
+					console.log("response " + response.requestId + ": " + JSON.stringify(response));
+					console.log("portListener.requestId: " + portListener.requestId);
+					port.onMessage.removeListener(portListener);
+					console.log("extraInfoSpec: " + JSON.stringify(attrs.extraInfoSpec));
+					if (attrs.extraInfoSpec) {
+						browser.webRequest.onBeforeSendHeaders.addListener(
+							onBeforeSendHeaders,
+							{ urls: [ target ] },
+							[ "blocking", "requestHeaders" ]
+						);
+					}
+					resolve(response.extraInfoSpec);
 				}
-			);
-			return { requestHeaders: requestHeaders };
-		} else {
-			return { };
-		}
-	}
-	;
+				;
+
+			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
+			portListener.requestId = attrs.requestId;
+			port.onMessage.addListener(portListener);
+			port.postMessage(attrs);
+		});
+	}, onHeadersReceived = (requestDetails) => {
+		console.log("-----------------");
+		console.log("onHeadersReceived");
+		return onHeadersReceivedPrelude(requestDetails, (requestDetails, attrs) => {
+			const
+				requestId = requestDetails.requestId
+				;
+
+			if (requestDetails.statusCode === 401) {
+				if (attrs.mech) {
+					attrs.extraInfoSpec = {
+						redirectUrl: requestDetails.url
+					};
+					return asyncRedirect(attrs);
+				}
+			}
+		});
+	}	;
 
 browser.webRequest.onHeadersReceived.addListener(
         onHeadersReceived,
@@ -204,15 +218,9 @@ browser.webRequest.onHeadersReceived.addListener(
         [ "blocking", "responseHeaders" ]
         );
 
-browser.webRequest.onBeforeSendHeaders.addListener(
-        onBeforeSendHeaders,
-        { urls: [ target ] },
-        [ "blocking", "requestHeaders" ]
-        );
-
 browser.webRequest.onCompleted.addListener(
-        completed,
-        { urls: [ target ] }
+		completed,
+		{ urls: [ target ] }
 );
 
 browser.webRequest.onErrorOccurred.addListener(
