@@ -63,16 +63,17 @@ const
 		return new Promise((resolve, reject) => {
 			const
 				portListener = (response) => {
-					console.log("response " + response.requestId + ": " + JSON.stringify(response));
-					console.log("portListener.requestId: " + portListener.requestId);
-					lastResponseGlobal[response.requestId] = response;
-					resolve(response.extraInfoSpec);
-					port.onMessage.removeListener(portListener);
+					if (response.requestId === attrs.requestId) {
+						port.onMessage.removeListener(portListener);
+						console.log("response " + response.requestId + ": " + JSON.stringify(response));
+						console.log("attrs.requestId: " + attrs.requestId);
+						lastResponseGlobal[response.requestId] = response;
+						resolve(response.extraInfoSpec);
+					}
 				}
 				;
 
 			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
-			portListener.requestId = attrs.requestId;
 			port.onMessage.addListener(portListener);
 			port.postMessage(attrs);
 		});
