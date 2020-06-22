@@ -1,6 +1,7 @@
 let lastResponseGlobal = { };
 let mech;
 let c2c = { };
+let resolveGlobal = { };
 
 const
 	target = "<all_urls>"
@@ -59,22 +60,15 @@ const
 		}
 		mech = undefined;
 		delete c2c[requestDetails.requestId];
+		delete resolveGlobal[requestDetails.requestId];
+	}, portListener = (response) => {
+		console.log("response " + response.requestId + ": " + JSON.stringify(response));
+		lastResponseGlobal[response.requestId] = response;
+		resolveGlobal[response.requestId](response.extraInfoSpec);
 	}, asyncRedirect = (attrs) => {
 		return new Promise((resolve, reject) => {
-			const
-				portListener = (response) => {
-					if (response.requestId === attrs.requestId) {
-						port.onMessage.removeListener(portListener);
-						console.log("response " + response.requestId + ": " + JSON.stringify(response));
-						console.log("attrs.requestId: " + attrs.requestId);
-						lastResponseGlobal[response.requestId] = response;
-						resolve(response.extraInfoSpec);
-					}
-				}
-				;
-
 			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
-			port.onMessage.addListener(portListener);
+			resolveGlobal[attrs.requestId] = resolve;
 			port.postMessage(attrs);
 		});
 	}, binaryToHex = (binary) => {
@@ -198,6 +192,8 @@ const
 		}
 	}
 	;
+
+port.onMessage.addListener(portListener);
 
 browser.webRequest.onHeadersReceived.addListener(
         onHeadersReceived,
