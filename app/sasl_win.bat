@@ -1,6 +1,6 @@
 @echo off
 
-goto browser-client
+REM goto browser-client
 
 :java-client
 echo starting SaslJavaClient > plugin.log

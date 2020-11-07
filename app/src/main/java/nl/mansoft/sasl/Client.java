@@ -5,8 +5,6 @@
  */
 package nl.mansoft.sasl;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Base64;
@@ -47,19 +45,13 @@ import nl.mansoft.browserextension.NativeMessaging;
 
 public class Client extends Application {
     private Dialog<Pair<String, String>> dialog;
+    private String authorizationId;
     private String password;
 
     public void processCallbacks(Callback[] callbacks) {
         for (Callback callback : callbacks) {
             if (callback instanceof NameCallback) {
                 NameCallback nameCallback = (NameCallback) callback;
-                Optional<Pair<String, String>> result = dialog.showAndWait();
-                result.ifPresent(usernamePassword -> {
-                    //System.out.println("Username=" + usernamePassword.getKey() + ", Password=" + usernamePassword.getValue());
-                    nameCallback.setName(usernamePassword.getKey());
-                    password = usernamePassword.getValue();
-                });
-
                 nameCallback.setName(nameCallback.getDefaultName());
             } else if (callback instanceof PasswordCallback) {
                 PasswordCallback passwordCallback = (PasswordCallback) callback;
@@ -76,8 +68,22 @@ public class Client extends Application {
         return jsonString == null ? null : jsonString.getString();
     }
 
+    public static JsonObject jsonGetObject(JsonObject jsonObject, String name) {
+        JsonObject jsonObjectOut = jsonObject.getJsonObject(name);
+        return  jsonObjectOut;
+    }
+
     public static boolean addString(JsonObjectBuilder builder, JsonObject jsonObject, String name) {
         String value = jsonGetString(jsonObject, name);
+        boolean result = value != null;
+        if (result) {
+            builder.add(name, value);
+        }
+        return result;
+    }
+
+    public static boolean addObject(JsonObjectBuilder builder, JsonObject jsonObject, String name) {
+        JsonObject value = jsonGetObject(jsonObject, name);
         boolean result = value != null;
         if (result) {
             builder.add(name, value);
@@ -103,7 +109,6 @@ public class Client extends Application {
 // Create the custom dialog.
         dialog = new Dialog<>();
         dialog.setTitle("Login Dialog");
-        dialog.setHeaderText("Look, a Custom Login Dialog");
 
 // Set the icon (must be included in the project).
 //dialog.setGraphic(new ImageView(this.getClass().getResource("login.png").toString()));
@@ -154,22 +159,31 @@ public class Client extends Application {
     public void start(Stage primaryStage) {
         try {
             System.err.println("STARTING");
-            //printArgs(logwriter, args);
             createDialog();
-
             JsonObject inputJson;
             String mechanism = "DIGEST-MD5";
             SaslClient sc = null;
             NativeMessaging nativeMessaging = new NativeMessaging();
             while ((inputJson = nativeMessaging.readMessage()) != null) {
                 System.err.println(inputJson);
+                String realm = jsonGetString(inputJson, "realm");
                 if (!inputJson.containsKey("s2s")) {
                     System.err.println("no realm, creating SASL client");
                     if (sc != null) {
                         System.err.println("disposing previous SASL client");
                         sc.dispose();
                     }
-                    sc = Sasl.createSaslClient(new String[] { mechanism }, "henri", "http", "test-realm.nl", null, new CallbackHandler() {
+
+                    dialog.setHeaderText(realm);
+
+                    Optional<Pair<String, String>> result = dialog.showAndWait();
+                    result.ifPresent(usernamePassword -> {
+                        System.err.println("Username=" + usernamePassword.getKey() + ", Password=" + usernamePassword.getValue());
+                        authorizationId = usernamePassword.getKey();
+                        password = usernamePassword.getValue();
+                    });
+
+                    sc = Sasl.createSaslClient(new String[] { mechanism }, authorizationId, "http", realm, null, new CallbackHandler() {
                         @Override
                         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
                             processCallbacks(callbacks);
@@ -179,7 +193,9 @@ public class Client extends Application {
                 JsonBuilderFactory factory = Json.createBuilderFactory(null);
                 JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder()
                     .add("mech", "DIGEST-MD5");
-                addString(outputJsonBuilder, inputJson, "realm");
+                outputJsonBuilder.add("realm", realm);
+                addString(outputJsonBuilder, inputJson, "requestId");
+                addObject(outputJsonBuilder, inputJson, "extraInfoSpec");
                 addString(outputJsonBuilder, inputJson, "s2s");
                 String s2cBase64 = jsonGetString(inputJson, "s2c");
                 if (s2cBase64 != null) {
