@@ -29,7 +29,7 @@ import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.message.BasicHeader;
 import org.apache.http.util.EntityUtils;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -37,18 +37,20 @@ import org.junit.Test;
  * @author hfman
  */
 public class TestClient {
-    private static PrintStream stdIn;
-    private static InputStream stdOut;
-    private static Thread serverStartThread;
+    private PrintStream stdIn;
+    private InputStream stdOut;
+    private Thread serverStartThread;
 
-    @BeforeClass
-    public static void setUp() throws Exception {
+    @Before
+    public void setUp() throws Exception {
+        System.err.println("setUp");
         PipedOutputStream stdInOutputStream = new PipedOutputStream();
         stdIn = new PrintStream(stdInOutputStream);
         System.setIn(new PipedInputStream(stdInOutputStream));
         PipedInputStream StdOutInputStream = new PipedInputStream();
         stdOut = StdOutInputStream;
         System.setOut(new PrintStream(new PipedOutputStream(StdOutInputStream)));
+
         serverStartThread = new Thread(new Runnable() {
             @Override
             public void run() {
@@ -58,9 +60,11 @@ public class TestClient {
             }
         });
         serverStartThread.start();
+
+//        Client.main(new String[] { });
     }
 
-    public static int readInt32() throws IOException {
+    public int readInt32() throws IOException {
         int byte1 = stdOut.read();
         if (byte1 == -1) {
             return -1;
@@ -156,8 +160,8 @@ public class TestClient {
                             "SASL" +
                             addField(inputJson,  " ", "mech", "\"") +
                             addField(inputJson,  ",", "realm", "\"") +
-                            addField(inputJson,  ",", "s2s", "") +
-                            addField(inputJson,  ",", "c2s", "");
+                            addField(inputJson,  ",", "s2s", "\"") +
+                            addField(inputJson,  ",", "c2s", "\"");
                     }
                     break;
             }
@@ -167,12 +171,11 @@ public class TestClient {
         return authorization;
     }
 
-    @Test
-    public void testClient() throws IOException {
+    private void saslTest(String url) throws IOException {
         CloseableHttpClient httpclient = HttpClients.createDefault();
         String authorization = null;
         while (authorization == null || !authorization.isEmpty()) {
-            HttpGet httpGet = new HttpGet("http://mansoft.nl:8080/HttpSasl/SaslServlet");
+            HttpGet httpGet = new HttpGet(url);
             if (authorization != null) {
                 Header authorizationHeader = new BasicHeader("Authorization", authorization);
                 httpGet.addHeader(authorizationHeader);
@@ -182,10 +185,23 @@ public class TestClient {
             System.err.println("Authorization: " + authorization);
         }
         stdIn.close();
+        stdOut.close();
         try {
             serverStartThread.join();
         } catch (InterruptedException ex) {
             Logger.getLogger(TestClient.class.getName()).log(Level.SEVERE, null, ex);
         }
     }
+
+    @Test
+    public void testLocal() throws IOException {
+        saslTest("http://localhost:8080/HttpSasl/SaslServlet");
+    }
+
+/*
+    @Test
+    public void testMansoft() throws IOException {
+        //saslTest("http://mansoft.nl:8080/HttpSasl/SaslServlet");
+    }
+*/
 }

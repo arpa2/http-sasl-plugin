@@ -12,21 +12,21 @@ const
 	, port = browser.runtime.connectNative("sasl")
 	, RE_SASL_MECH = "[A-Z0-9-_]{1,20}"
 	, RE_MECHSTRING = "\"(" + RE_SASL_MECH + "(?:[ ]" + RE_SASL_MECH + ")*)\""
-	, RE_DNSSTRING = "\"([a-zA-Z0-9-_]+(?:\\.[a-zA-Z0-9-_]+)+)\""
+	, RE_REALMSTRING = "\"([^\"]+)\""
 	, RE_BWS = "[ \\t]*"
 	, RE_OWS = RE_BWS
-	, RE_TOKEN68 = "([a-zA-Z0-9-._~+/]+=*)"
+	, RE_BASE64STRING = "\"([a-zA-Z0-9-._~+/]*=*)\""
 	, RE_AUTH_PARAM =
     "(?:" +
-        "([CcSs][2][CcSs])" + RE_BWS + "=" + RE_BWS + RE_TOKEN68 +
+        "([CcSs][2][CcSs])" + RE_BWS + "=" + RE_BWS + RE_BASE64STRING +
         "|" +
         "([Mm][Ee][Cc][Hh])" + RE_BWS + "=" + RE_BWS + RE_MECHSTRING +
         "|" +
-        "([Rr][Ee][Aa][Ll][Mm])" + RE_BWS + '=' + RE_BWS + RE_DNSSTRING +
+        "([Rr][Ee][Aa][Ll][Mm])" + RE_BWS + '=' + RE_BWS + RE_REALMSTRING +
     ")"
 	, RE_AUTH_SCHEME = "[Ss][Aa][Ss][Ll]"
-	, RE_CREDENTIALS = RE_AUTH_SCHEME + "(?:[ ]+(" + RE_AUTH_PARAM + "(?:" +
-        RE_OWS + "," + RE_OWS + RE_AUTH_PARAM + ")+)?)"
+	, RE_CREDENTIALS = "^(?:.*,)?[ \\t]*" + RE_AUTH_SCHEME + "(?:[ ]+(" + RE_AUTH_PARAM + "(?:" +
+        RE_OWS + "," + RE_OWS + RE_AUTH_PARAM + ")*)?)[ \\t]*(?:,.*)?$"
 	, parseSasl = (input) => {
 		//console.log(input);
 		//console.log(RE_CREDENTIALS);
@@ -139,9 +139,9 @@ const
 			};
 		}
 	}, onBeforeSendHeaders = (requestDetails) => {
-		const sendField = function (name, value, include_quotes) {
-			const quotes = include_quotes ? "\"" : "";
-			return name + "=" + quotes + value + quotes;;
+		const sendField = function (name, value) {
+			const quote = "\"";
+			return name + "=" + quote + value + quote;
 		}
 		console.log("-------------------");
 		console.log("onBeforeSendHeaders");
@@ -157,19 +157,15 @@ const
 			let sep = " ";
 
 			if (lastResponse.mech) {
-				authorization += sep + sendField("mech", lastResponse.mech, true);
-				sep = ","
-			}
-			if (lastResponse.realm) {
-				authorization += sep + sendField("realm", lastResponse.realm, true);
+				authorization += sep + sendField("mech", lastResponse.mech);
 				sep = ","
 			}
 			if (lastResponse.s2s) {
-				authorization += sep + sendField("s2s", lastResponse.s2s, false);
+				authorization += sep + sendField("s2s", lastResponse.s2s);
 				sep = ","
 			}
 			if (lastResponse.c2s) {
-				authorization += sep + sendField("c2s", lastResponse.c2s, false);
+				authorization += sep + sendField("c2s", lastResponse.c2s);
 				sep = ","
 			}
 			if (lastResponse.c2c) {

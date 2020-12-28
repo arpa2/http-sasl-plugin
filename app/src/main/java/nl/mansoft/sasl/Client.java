@@ -7,6 +7,7 @@ package nl.mansoft.sasl;
 
 import java.io.IOException;
 import java.io.PrintWriter;
+import java.net.URL;
 import java.util.Base64;
 import java.util.Optional;
 import javafx.application.Application;
@@ -58,6 +59,7 @@ public class Client extends Application {
                 passwordCallback.setPassword(password.toCharArray());
             } else if (callback instanceof RealmCallback) {
                 RealmCallback realmCallback = (RealmCallback) callback;
+                System.err.println("RealmCallback: " + realmCallback.getDefaultText());
                 realmCallback.setText(realmCallback.getDefaultText());
             }
         }
@@ -161,20 +163,24 @@ public class Client extends Application {
             System.err.println("STARTING");
             createDialog();
             JsonObject inputJson;
-            String mechanism = "DIGEST-MD5";
             SaslClient sc = null;
             NativeMessaging nativeMessaging = new NativeMessaging();
             while ((inputJson = nativeMessaging.readMessage()) != null) {
                 System.err.println(inputJson);
-                String realm = jsonGetString(inputJson, "realm");
-                if (!inputJson.containsKey("s2s")) {
-                    System.err.println("no realm, creating SASL client");
+                JsonBuilderFactory factory = Json.createBuilderFactory(null);
+                JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder();
+                String mech = jsonGetString(inputJson, "mech");
+                if (mech != null) {
+                    System.err.println("creating SASL client, mechanisms: " + mech);
                     if (sc != null) {
                         System.err.println("disposing previous SASL client");
                         sc.dispose();
                     }
 
-                    dialog.setHeaderText(realm);
+                    String realm = jsonGetString(inputJson, "realm");
+                    if (realm != null) {
+                        dialog.setHeaderText(realm);
+                    }
 
                     Optional<Pair<String, String>> result = dialog.showAndWait();
                     result.ifPresent(usernamePassword -> {
@@ -182,18 +188,31 @@ public class Client extends Application {
                         authorizationId = usernamePassword.getKey();
                         password = usernamePassword.getValue();
                     });
-
-                    sc = Sasl.createSaslClient(new String[] { mechanism }, authorizationId, "http", realm, null, new CallbackHandler() {
+                    JsonObject extraInfoSpec = jsonGetObject(inputJson, "extraInfoSpec");
+                    String serverName = "localhost";
+                    if (extraInfoSpec != null) {
+                        String redirectUrl = jsonGetString(extraInfoSpec, "redirectUrl");
+                        if (redirectUrl != null) {
+                            URL url = new URL(redirectUrl);
+                            serverName = url.getHost();
+                            System.err.println("serverName: " + serverName);
+                        } else {
+                            System.err.println("redirectUrl not found");
+                        }
+                    } else {
+                        System.err.println("extraInfoSpec not found");
+                    }
+                    //String[] mechanisms = mech.split(" ");
+                    String[] mechanisms = new String[] { "CRAM-MD5" };
+                    //String[] mechanisms = new String[] { "DIGEST-MD5" };
+                    sc = Sasl.createSaslClient(mechanisms, authorizationId, "http", realm, null, new CallbackHandler() {
                         @Override
                         public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
                             processCallbacks(callbacks);
                         }
                     });
+                    outputJsonBuilder.add("mech", sc.getMechanismName());
                 }
-                JsonBuilderFactory factory = Json.createBuilderFactory(null);
-                JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder()
-                    .add("mech", "DIGEST-MD5");
-                outputJsonBuilder.add("realm", realm);
                 addString(outputJsonBuilder, inputJson, "requestId");
                 addObject(outputJsonBuilder, inputJson, "extraInfoSpec");
                 addString(outputJsonBuilder, inputJson, "s2s");
