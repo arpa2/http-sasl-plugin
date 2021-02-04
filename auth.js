@@ -1,5 +1,5 @@
 let lastResponseGlobal = { };
-let mech;
+let mechGlobal;
 let c2c = { };
 let resolveGlobal = { };
 
@@ -58,18 +58,29 @@ const
 		if (index > -1) {
 			pendingRequests.splice(index, 1);
 		}
-		mech = undefined;
+		mechGlobal = undefined;
 		delete c2c[requestDetails.requestId];
 		delete resolveGlobal[requestDetails.requestId];
 	}, portListener = (response) => {
 		console.log("response " + response.requestId + ": " + JSON.stringify(response));
+		if (response.mech) {
+			mechGlobal = response.mech;
+		}
 		lastResponseGlobal[response.requestId] = response;
 		resolveGlobal[response.requestId](response.extraInfoSpec);
 	}, asyncRedirect = (attrs) => {
 		return new Promise((resolve, reject) => {
-			console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
 			resolveGlobal[attrs.requestId] = resolve;
-			port.postMessage(attrs);
+			browser.webRequest.getSecurityInfo(attrs.requestId, { rawDER: true }).then((value) => {
+				console.log(value);
+				const certificates = value.certificates;
+				if (certificates && certificates.length === 1) {
+					const fingerprint = certificates[0].fingerprint.sha256;
+					attrs.channelBinding = "tls-server-end-point:" + fingerprint.replaceAll(":", "");
+				}
+				console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
+				port.postMessage(attrs);
+			});
 		});
 	}, binaryToHex = (binary) => {
 		let result = "";
@@ -79,7 +90,7 @@ const
 		return result;
 	}, saslDataToString = (str) => {
 		const data = atob(str);
-		return mech === "DIGEST-MD5" ? data : binaryToHex(data);
+		return mechGlobal === "DIGEST-MD5" ? data : binaryToHex(data);
 	}, onHeadersReceived = (requestDetails) => {
 		let i;
 		const responseHeaders = requestDetails.responseHeaders;
@@ -97,10 +108,8 @@ const
 
 			console.log("Status code: " + requestDetails.statusCode);
 			console.log(attrs);
-
 			if (attrs.mech) {
-				mech = attrs.mech;
-				console.log("mech: " + mech);
+				console.log("mech: " + attrs.mech);
 			}
 			if (attrs.s2c) {
 				console.log("s2c: " + saslDataToString(attrs.s2c));
