@@ -68,6 +68,15 @@ const
 		}
 		lastResponseGlobal[response.requestId] = response;
 		resolveGlobal[response.requestId](response.extraInfoSpec);
+	}, hexStringToBin = (str) => {
+		let a = "";
+		if (!str) {
+			return a;
+		}
+		for (var i = 0, len = str.length; i < len; i += 2) {
+			a += String.fromCharCode(parseInt(str.slice(i, i + 2), 16));
+		}
+		return a;
 	}, asyncRedirect = (attrs) => {
 		return new Promise((resolve, reject) => {
 			resolveGlobal[attrs.requestId] = resolve;
@@ -76,7 +85,7 @@ const
 				const certificates = value.certificates;
 				if (certificates && certificates.length === 1) {
 					const fingerprint = certificates[0].fingerprint.sha256;
-					attrs.channelBinding = "tls-server-end-point:" + fingerprint.replaceAll(":", "");
+					attrs.channelBinding = btoa("tls-server-end-point:" + hexStringToBin(fingerprint.replaceAll(":", "")));
 				}
 				console.log("posting " + attrs.requestId + ": " + JSON.stringify(attrs));
 				port.postMessage(attrs);
