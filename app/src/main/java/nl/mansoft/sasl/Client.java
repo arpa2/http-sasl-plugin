@@ -7,7 +7,6 @@ import java.util.Base64;
 import javax.security.sasl.Sasl;
 import java.io.IOException;
 import java.net.URL;
-import java.util.Collection;
 import java.util.HashSet;
 import java.util.Arrays;
 import java.util.Map;
@@ -35,6 +34,7 @@ import javax.security.auth.callback.Callback;
 import javafx.scene.control.ChoiceBox;
 import javafx.scene.control.Dialog;
 import javafx.application.Application;
+import javafx.collections.ObservableList;
 
 /**
  *
@@ -181,8 +181,11 @@ public class Client extends Application {
                 final String mech = jsonGetString(inputJson, "mech");
                 if (mech != null) {
                     System.err.println("creating SASL client, mechanisms: " + mech);
-                    mechanismsBox.getItems().clear();
-                    mechanismsBox.getItems().addAll((Collection) new HashSet(Arrays.asList(mech.split(" "))));
+                    ObservableList<String> items = mechanismsBox.getItems();
+                    items.clear();
+                    items.addAll(new HashSet(Arrays.asList(mech.split(" "))));
+                    mechanismsBox.setValue(items.get(0));
+
                     if (sc != null) {
                         System.err.println("disposing previous SASL client");
                         sc.dispose();
@@ -191,7 +194,7 @@ public class Client extends Application {
                     if (realm != null) {
                         dialog.setHeaderText(realm);
                     }
-                    final Optional<MyResult> dialogResult = (Optional<MyResult>) dialog.showAndWait();
+                    final Optional<MyResult> dialogResult = dialog.showAndWait();
                     dialogResult.ifPresent(result -> {
                         System.err.println("Username=" + result.getUsername() + ", Password=" + result.getPassword() + ", Mechanism=" + result.getMechanism());
                         username = result.getUsername();
@@ -222,7 +225,7 @@ public class Client extends Application {
                 addObject(outputJsonBuilder, inputJson, "extraInfoSpec");
                 addString(outputJsonBuilder, inputJson, "s2s");
                 final String s2cBase64 = jsonGetString(inputJson, "s2c");
-                if (s2cBase64 != null) {
+                if (sc != null && s2cBase64 != null) {
                     final byte[] challenge = Base64.getDecoder().decode(s2cBase64);
                     System.err.println(new String(challenge));
                     final byte[] response = sc.evaluateChallenge(challenge);
