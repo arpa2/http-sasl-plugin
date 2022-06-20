@@ -1,199 +1,209 @@
-/*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
 package nl.mansoft.sasl;
 
-import java.io.IOException;
-import java.io.PrintWriter;
-import java.net.URL;
-import java.util.Base64;
 import java.util.Optional;
-import javafx.application.Application;
+import javax.json.JsonBuilderFactory;
+import javax.security.sasl.SaslClient;
+import java.util.Base64;
+import javax.security.sasl.Sasl;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Collection;
+import java.util.HashSet;
+import java.util.Arrays;
+import java.util.Map;
+import javax.json.Json;
+import nl.mansoft.browserextension.NativeMessaging;
+import javafx.stage.Stage;
 import javafx.application.Platform;
-import javafx.geometry.Insets;
 import javafx.scene.Node;
-import javafx.scene.control.ButtonBar.ButtonData;
-import javafx.scene.control.ButtonType;
-import javafx.scene.control.Dialog;
 import javafx.scene.control.Label;
 import javafx.scene.control.PasswordField;
 import javafx.scene.control.TextField;
+import javafx.geometry.Insets;
 import javafx.scene.layout.GridPane;
-import javafx.stage.Stage;
-import javafx.util.Pair;
-import javax.json.Json;
-import javax.json.JsonBuilderFactory;
-import javax.json.JsonObject;
+import javafx.scene.control.ButtonType;
+import javafx.scene.control.ButtonBar;
+import java.io.PrintWriter;
+import javax.json.JsonValue;
 import javax.json.JsonObjectBuilder;
 import javax.json.JsonString;
-import javax.security.auth.callback.Callback;
-import javax.security.auth.callback.CallbackHandler;
-import javax.security.auth.callback.NameCallback;
-import javax.security.auth.callback.PasswordCallback;
-import javax.security.auth.callback.UnsupportedCallbackException;
+import javax.json.JsonObject;
 import javax.security.sasl.RealmCallback;
-import javax.security.sasl.Sasl;
-import javax.security.sasl.SaslClient;
-import nl.mansoft.browserextension.NativeMessaging;
+import javax.security.auth.callback.PasswordCallback;
+import javax.security.auth.callback.NameCallback;
+import javax.security.auth.callback.Callback;
+import javafx.scene.control.ChoiceBox;
+import javafx.scene.control.Dialog;
+import javafx.application.Application;
+
 /**
  *
  * @author hfmanson@gmail.com
  */
-
 // JavaFX login dialog based on https://code.makery.ch/blog/javafx-dialogs-official/
-
 public class Client extends Application {
-    private Dialog<Pair<String, String>> dialog;
-    private String authorizationId;
-    private String password;
 
-    public void processCallbacks(Callback[] callbacks) {
-        for (Callback callback : callbacks) {
+    private static class MyResult {
+
+        private final String username;
+        private final String password;
+        private final String mechanism;
+
+        public MyResult(final String username, final String password, final String mechanism) {
+            this.username = username;
+            this.password = password;
+            this.mechanism = mechanism;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public String getMechanism() {
+            return mechanism;
+        }
+    }
+    private Dialog<MyResult> dialog;
+    private String username;
+    private String password;
+    private String mechanism;
+    private ChoiceBox mechanismsBox;
+
+    public void processCallbacks(final Callback[] callbacks) {
+        for (final Callback callback : callbacks) {
             if (callback instanceof NameCallback) {
-                NameCallback nameCallback = (NameCallback) callback;
+                final NameCallback nameCallback = (NameCallback) callback;
                 nameCallback.setName(nameCallback.getDefaultName());
             } else if (callback instanceof PasswordCallback) {
-                PasswordCallback passwordCallback = (PasswordCallback) callback;
+                final PasswordCallback passwordCallback = (PasswordCallback) callback;
                 passwordCallback.setPassword(password.toCharArray());
             } else if (callback instanceof RealmCallback) {
-                RealmCallback realmCallback = (RealmCallback) callback;
+                final RealmCallback realmCallback = (RealmCallback) callback;
                 System.err.println("RealmCallback: " + realmCallback.getDefaultText());
                 realmCallback.setText(realmCallback.getDefaultText());
             }
         }
     }
 
-    public static String jsonGetString(JsonObject jsonObject, String name) {
-        JsonString jsonString = jsonObject.getJsonString(name);
-        return jsonString == null ? null : jsonString.getString();
+    public static String jsonGetString(final JsonObject jsonObject, final String name) {
+        final JsonString jsonString = jsonObject.getJsonString(name);
+        return (jsonString == null) ? null : jsonString.getString();
     }
 
-    public static JsonObject jsonGetObject(JsonObject jsonObject, String name) {
-        JsonObject jsonObjectOut = jsonObject.getJsonObject(name);
-        return  jsonObjectOut;
+    public static JsonObject jsonGetObject(final JsonObject jsonObject, final String name) {
+        final JsonObject jsonObjectOut = jsonObject.getJsonObject(name);
+        return jsonObjectOut;
     }
 
-    public static boolean addString(JsonObjectBuilder builder, JsonObject jsonObject, String name) {
-        String value = jsonGetString(jsonObject, name);
-        boolean result = value != null;
+    public static boolean addString(final JsonObjectBuilder builder, final JsonObject jsonObject, final String name) {
+        final String value = jsonGetString(jsonObject, name);
+        final boolean result = value != null;
         if (result) {
             builder.add(name, value);
         }
         return result;
     }
 
-    public static boolean addObject(JsonObjectBuilder builder, JsonObject jsonObject, String name) {
-        JsonObject value = jsonGetObject(jsonObject, name);
-        boolean result = value != null;
+    public static boolean addObject(final JsonObjectBuilder builder, final JsonObject jsonObject, final String name) {
+        final JsonObject value = jsonGetObject(jsonObject, name);
+        final boolean result = value != null;
         if (result) {
-            builder.add(name, value);
+            builder.add(name, (JsonValue) value);
         }
         return result;
     }
 
-    public static void printArgs(PrintWriter logwriter, String[] args) {
+    public static void printArgs(final PrintWriter logwriter, final String[] args) {
         if (args.length == 0) {
             System.err.println("No arguments");
         } else {
-            for (String arg: args) {
+            for (final String arg : args) {
                 System.err.println(arg);
             }
         }
     }
 
-    public static void main(String[] args) {
+    public static void main(final String[] args) {
         launch(args);
     }
 
     private void createDialog() {
-// Create the custom dialog.
         dialog = new Dialog<>();
         dialog.setTitle("Login Dialog");
-
-// Set the icon (must be included in the project).
-//dialog.setGraphic(new ImageView(this.getClass().getResource("login.png").toString()));
-// Set the button types.
-        ButtonType loginButtonType = new ButtonType("Login", ButtonData.OK_DONE);
+        final ButtonType loginButtonType = new ButtonType("Login", ButtonBar.ButtonData.OK_DONE);
         dialog.getDialogPane().getButtonTypes().addAll(loginButtonType, ButtonType.CANCEL);
 
-// Create the username and password labels and fields.
-        GridPane grid = new GridPane();
-        grid.setHgap(10);
-        grid.setVgap(10);
-        grid.setPadding(new Insets(20, 150, 10, 10));
-
-        TextField username = new TextField();
-        username.setPromptText("Username");
-        PasswordField password = new PasswordField();
-        password.setPromptText("Password");
-
+        final GridPane grid = new GridPane();
+        grid.setHgap(10.0);
+        grid.setVgap(10.0);
+        grid.setPadding(new Insets(20.0, 150.0, 10.0, 10.0));
+        final TextField usernameField = new TextField();
+        usernameField.setPromptText("Username");
+        final PasswordField passwordField = new PasswordField();
+        passwordField.setPromptText("Password");
+        mechanismsBox = new ChoiceBox();
         grid.add(new Label("Username:"), 0, 0);
-        grid.add(username, 1, 0);
+        grid.add(usernameField, 1, 0);
         grid.add(new Label("Password:"), 0, 1);
-        grid.add(password, 1, 1);
-
-// Enable/Disable login button depending on whether a username was entered.
-        Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
+        grid.add(passwordField, 1, 1);
+        grid.add(new Label("Mechanism:"), 0, 2);
+        grid.add(mechanismsBox, 1, 2);
+        final Node loginButton = dialog.getDialogPane().lookupButton(loginButtonType);
         loginButton.setDisable(true);
-
-// Do some validation (using the Java 8 lambda syntax).
-        username.textProperty().addListener((observable, oldValue, newValue) -> {
-            loginButton.setDisable(newValue.trim().isEmpty());
-        });
-
-        dialog.getDialogPane().setContent(grid);
+        usernameField.textProperty().addListener((observable, oldValue, newValue) -> loginButton.setDisable(newValue.trim().isEmpty()));
+        dialog.getDialogPane().setContent((Node) grid);
         dialog.setResizable(true);
-// Request focus on the username field by default.
-        Platform.runLater(() -> username.requestFocus());
-
-// Convert the result to a username-password-pair when the login button is clicked.
+        Platform.runLater(() -> usernameField.requestFocus());
         dialog.setResultConverter(dialogButton -> {
             if (dialogButton == loginButtonType) {
-                return new Pair<>(username.getText(), password.getText());
+                return new MyResult(usernameField.getText(), passwordField.getText(), (String) mechanismsBox.getValue());
             }
             return null;
         });
     }
 
     @Override
-    public void start(Stage primaryStage) {
+    public void start(final Stage primaryStage) {
         try {
             System.err.println("STARTING");
             createDialog();
-            JsonObject inputJson;
             SaslClient sc = null;
-            NativeMessaging nativeMessaging = new NativeMessaging();
+            final NativeMessaging nativeMessaging = new NativeMessaging();
+            JsonObject inputJson;
             while ((inputJson = nativeMessaging.readMessage()) != null) {
                 System.err.println(inputJson);
-                JsonBuilderFactory factory = Json.createBuilderFactory(null);
-                JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder();
-                String mech = jsonGetString(inputJson, "mech");
+                final JsonBuilderFactory factory = Json.createBuilderFactory((Map) null);
+                final JsonObjectBuilder outputJsonBuilder = factory.createObjectBuilder();
+                final String mech = jsonGetString(inputJson, "mech");
                 if (mech != null) {
                     System.err.println("creating SASL client, mechanisms: " + mech);
+                    mechanismsBox.getItems().clear();
+                    mechanismsBox.getItems().addAll((Collection) new HashSet(Arrays.asList(mech.split(" "))));
                     if (sc != null) {
                         System.err.println("disposing previous SASL client");
                         sc.dispose();
                     }
-
-                    String realm = jsonGetString(inputJson, "realm");
+                    final String realm = jsonGetString(inputJson, "realm");
                     if (realm != null) {
                         dialog.setHeaderText(realm);
                     }
-
-                    Optional<Pair<String, String>> result = dialog.showAndWait();
-                    result.ifPresent(usernamePassword -> {
-                        System.err.println("Username=" + usernamePassword.getKey() + ", Password=" + usernamePassword.getValue());
-                        authorizationId = usernamePassword.getKey();
-                        password = usernamePassword.getValue();
+                    final Optional<MyResult> dialogResult = (Optional<MyResult>) dialog.showAndWait();
+                    dialogResult.ifPresent(result -> {
+                        System.err.println("Username=" + result.getUsername() + ", Password=" + result.getPassword() + ", Mechanism=" + result.getMechanism());
+                        username = result.getUsername();
+                        password = result.getPassword();
+                        mechanism = result.getMechanism();
                     });
-                    JsonObject extraInfoSpec = jsonGetObject(inputJson, "extraInfoSpec");
+                    final JsonObject extraInfoSpec = jsonGetObject(inputJson, "extraInfoSpec");
                     String serverName = "localhost";
                     if (extraInfoSpec != null) {
-                        String redirectUrl = jsonGetString(extraInfoSpec, "redirectUrl");
+                        final String redirectUrl = jsonGetString(extraInfoSpec, "redirectUrl");
                         if (redirectUrl != null) {
-                            URL url = new URL(redirectUrl);
+                            final URL url = new URL(redirectUrl);
                             serverName = url.getHost();
                             System.err.println("serverName: " + serverName);
                         } else {
@@ -202,45 +212,40 @@ public class Client extends Application {
                     } else {
                         System.err.println("extraInfoSpec not found");
                     }
-                    //String[] mechanisms = mech.split(" ");
-                    String[] mechanisms = new String[] { "CRAM-MD5" };
-                    //String[] mechanisms = new String[] { "DIGEST-MD5" };
-                    sc = Sasl.createSaslClient(mechanisms, authorizationId, "http", realm, null, new CallbackHandler() {
-                        @Override
-                        public void handle(Callback[] callbacks) throws IOException, UnsupportedCallbackException {
-                            processCallbacks(callbacks);
-                        }
+                    final String[] mechanisms = {mechanism};
+                    sc = Sasl.createSaslClient(mechanisms, username, "http", serverName, null, (final Callback[] callbacks) -> {
+                        Client.this.processCallbacks(callbacks);
                     });
                     outputJsonBuilder.add("mech", sc.getMechanismName());
                 }
                 addString(outputJsonBuilder, inputJson, "requestId");
                 addObject(outputJsonBuilder, inputJson, "extraInfoSpec");
                 addString(outputJsonBuilder, inputJson, "s2s");
-                String s2cBase64 = jsonGetString(inputJson, "s2c");
+                final String s2cBase64 = jsonGetString(inputJson, "s2c");
                 if (s2cBase64 != null) {
-                    byte[] challenge = Base64.getDecoder().decode(s2cBase64);
+                    final byte[] challenge = Base64.getDecoder().decode(s2cBase64);
                     System.err.println(new String(challenge));
-                    byte[] response = sc.evaluateChallenge(challenge);
+                    final byte[] response = sc.evaluateChallenge(challenge);
                     if (response == null) {
                         System.err.println("response is null");
-                        if (sc.isComplete()) {
-                            System.err.println("sc.isComplete()");
-                            sc.dispose();
-                            sc = null;
-                        }
                     } else {
                         System.err.println(new String(response));
-                        String c2s = Base64.getEncoder().encodeToString(response);
+                        final String c2s = Base64.getEncoder().encodeToString(response);
                         outputJsonBuilder.add("c2s", c2s);
                     }
+                    if (sc.isComplete()) {
+                        System.err.println("sc.isComplete()");
+                        sc.dispose();
+                        sc = null;
+                    }
                 }
-                JsonObject outputJson = outputJsonBuilder.build();
+                final JsonObject outputJson = outputJsonBuilder.build();
                 nativeMessaging.writeMessage(outputJson);
-                String output = outputJson.toString();
+                final String output = outputJson.toString();
                 System.err.println(output);
             }
             System.err.println("EXITING");
-        } catch (Exception e) {
+        } catch (IOException e) {
             e.printStackTrace(System.err);
         }
     }
