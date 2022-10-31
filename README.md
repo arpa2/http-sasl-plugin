@@ -7,3 +7,5 @@ This JavaFX program demonstrates authentication using [HTTP SASL](https://datatr
 
 ## Building Java Native Client
 After cloning open the `SaslJavaClient` maven project in the `app` directory and build it.
+
+> Project is supported by the [NLnet Foundation](https://nlnet.nl/) as part of the [SASL Works](https://nlnet.nl/project/SASLworks) project
